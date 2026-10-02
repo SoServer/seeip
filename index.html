@@ -1087,8 +1087,7 @@
         // ---------- 网络配置 ----------
         setText('gatewayValue', getGatewayFromLocalIPs(localIPs.localIpv4));
 
-        const dnsResult = await fetchDnsInfo(ipInfo);
-        // 显示
+        // DNS显示
         if (dnsResult.dns) {
           setTags('dnsValue', [{ text: dnsResult.dns, cls: 'public' }]);
         } else {
