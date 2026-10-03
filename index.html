@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-  <title>网络环境检测</title>
+  <title>网络信息检测</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
@@ -135,6 +135,7 @@
     .tag.public { background: #d4edda; color: #155724; }
     .tag.local  { background: #fff3cd; color: #856404; }
     .tag.mdns   { background: #f8d7da; color: #721c24; }
+    .tag.hash   { background: #e2d9f3; color: #4a2d7a; font-weight: 600; }
     .disclaimer {
       margin-top: 1.5rem; font-size: clamp(0.65rem, 1.8vw, 0.78rem);
       color: #4b6b88; border-top: 1px solid #c7d9e9;
@@ -336,14 +337,55 @@
             <div class="info-label"><i class="fas fa-tachometer-alt"></i> 性能评分</div>
             <div class="info-value" id="performanceValue"><span class="placeholder">—</span></div>
           </div>
+        </div>
+      </div>
+
+      <!-- 第五组：高级指纹 (新增) -->
+      <div>
+        <div class="section-title">
+          <i class="fas fa-fingerprint"></i> 高级指纹
+        </div>
+        <div class="info-grid">
           <div class="info-item">
-            <div class="info-label"><i class="fas fa-fingerprint"></i> 浏览器指纹</div>
+            <div class="info-label"><i class="fas fa-paint-brush"></i> Canvas 指纹</div>
+            <div class="info-value" id="canvasValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-cube"></i> WebGL 供应商</div>
+            <div class="info-value" id="webglVendorValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-cube"></i> WebGL 渲染器</div>
+            <div class="info-value" id="webglRendererValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-music"></i> 音频指纹</div>
+            <div class="info-value" id="audioValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-font"></i> 字体数量</div>
+            <div class="info-value" id="fontCountValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-font"></i> 检测到的字体</div>
+            <div class="info-value" id="fontListValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-calculator"></i> 数学指纹</div>
+            <div class="info-value" id="mathValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-th"></i> 特性矩阵</div>
+            <div class="info-value" id="featureValue"><span class="placeholder">—</span></div>
+          </div>
+          <div class="info-item">
+            <div class="info-label"><i class="fas fa-fingerprint"></i> 综合指纹哈希</div>
             <div class="info-value" id="fingerprintValue"><span class="placeholder">—</span></div>
           </div>
         </div>
       </div>
 
-      <!-- 第五组：环境与安全 -->
+      <!-- 第六组：环境与安全 -->
       <div>
         <div class="section-title">
           <i class="fas fa-shield-virus"></i> 环境与安全
@@ -577,7 +619,6 @@
             const response = await fetchWithTimeout(url, 5000);
             if (response.ok) {
               const text = (await response.text()).trim();
-              // IPv6 简单校验（包含冒号）
               if (text && text.includes(':') && /^[0-9a-fA-F:]+$/.test(text)) return text;
             }
           } catch (e) {}
@@ -587,8 +628,6 @@
 
       // ========== DNS 信息（以 edns.ip-api.com 为主路径） ==========
       async function fetchDnsInfo(ipInfo) {
-        // 主路径: edns.ip-api.com —— 专为浏览器设计，返回 DNS 解析器 IP
-        // 尝试 2 次（首次 + 立即重试），每次超时 8 秒
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const controller = new AbortController();
@@ -598,10 +637,8 @@
               cache: 'no-store'
             });
             clearTimeout(timer);
-
             if (response.ok) {
               const data = await response.json();
-              // 只要 dns.ip 存在就返回（这是核心字段）
               if (data && data.dns && data.dns.ip) {
                 return {
                   dns: data.dns.ip,
@@ -609,7 +646,6 @@
                   clientIp: (data.edns && data.edns.ip) ? data.edns.ip : null
                 };
               }
-              // 请求成功但 dns.ip 为空：不再重试，直接进入备选
               console.warn('edns.ip-api.com 返回成功但 dns.ip 为空');
               break;
             } else {
@@ -617,20 +653,14 @@
             }
           } catch (e) {
             console.warn(`edns.ip-api.com 请求失败 (尝试 ${attempt + 1}):`, e.message);
-            // 如果是超时/网络错误，等 300ms 再重试
             if (attempt === 0) {
               await new Promise(r => setTimeout(r, 300));
             }
           }
         }
-
-        // ---- 备选路径：仅当主路径确实不可用时才使用 ----
-        // 备选 1: IP 信息中自带的 dns 字段
         if (ipInfo && ipInfo.dns) {
           return { dns: ipInfo.dns, source: 'IP 接口 (备用)' };
         }
-
-        // 备选 2: 再单独请求一次 ipapi.co
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 6000);
@@ -648,8 +678,6 @@
         } catch (e) {
           console.warn('ipapi.co 备用 DNS 获取失败:', e.message);
         }
-
-        // 全部失败
         return { dns: null, source: null };
       }
 
@@ -678,22 +706,17 @@
               const cand = e.candidate.candidate;
               const typeMatch = cand.match(/typ\s+(\w+)/);
               const type = typeMatch ? typeMatch[1] : '';
-              // host 候选 —— 本地地址
               if (type === 'host') {
-                // mDNS 混淆：形如 xxxx.local
                 const mdnsMatch = cand.match(/([a-f0-9-]+\.local)/i);
                 if (mdnsMatch) {
                   result.mdns.add(mdnsMatch[1]);
                 } else {
-                  // IPv4
                   const v4 = cand.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
                   if (v4) result.localIpv4.add(v4[0]);
-                  // IPv6
                   const v6 = cand.match(/([a-f0-9]{1,4}(:[a-f0-9]{1,4}){2,7})/i);
                   if (v6) result.localIpv6.add(v6[0]);
                 }
               }
-              // srflx 候选 —— STUN 反射的公网地址
               if (type === 'srflx') {
                 const v4 = cand.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
                 if (v4) result.stunReflexive.add(v4[0]);
@@ -720,14 +743,12 @@
 
       // ========== 时区推导 (多级策略) ==========
       function inferTimezone(ipInfo) {
-        // 1. IP 接口时区
         if (ipInfo) {
           const tz = ipInfo.timezone || ipInfo.time_zone || ipInfo.timeZone;
           if (tz) {
             const offset = ipInfo.utc_offset || ipInfo.offset || '';
             return { value: tz + (offset ? ` (UTC${offset})` : ''), source: 'IP 接口' };
           }
-          // 2. 经纬度推导
           if (ipInfo.longitude || ipInfo.lon) {
             const lon = parseFloat(ipInfo.longitude || ipInfo.lon);
             if (!isNaN(lon)) {
@@ -737,12 +758,10 @@
             }
           }
         }
-        // 3. 浏览器 API
         try {
           const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
           if (browserTz) return { value: browserTz, source: '浏览器 API' };
         } catch (e) {}
-        // 4. 系统时间偏移
         const offset = new Date().getTimezoneOffset();
         const offsetHours = -offset / 60;
         const offsetStr = (offsetHours >= 0 ? '+' : '') + offsetHours;
@@ -897,23 +916,200 @@
         return `${score}/100 (${level})`;
       }
 
-      function getFingerprint() {
-        const parts = [
-          navigator.userAgent, navigator.language, screen.colorDepth,
-          screen.width + 'x' + screen.height, new Date().getTimezoneOffset(),
-          navigator.hardwareConcurrency || '', navigator.deviceMemory || '',
-          navigator.platform || ''
+      // ========== 高级指纹采集 ==========
+
+      // Canvas 指纹
+      function getCanvasFingerprint() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 280;
+          canvas.height = 60;
+          const ctx = canvas.getContext('2d');
+          ctx.textBaseline = 'top';
+          ctx.font = '14px "Arial"';
+          ctx.fillStyle = '#f60';
+          ctx.fillRect(125, 1, 62, 20);
+          ctx.fillStyle = '#069';
+          ctx.fillText('浏览器指纹,🌐', 2, 15);
+          ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+          ctx.fillText('浏览器指纹,🌐', 4, 17);
+          const gradient = ctx.createLinearGradient(0, 0, 280, 0);
+          gradient.addColorStop(0, '#ff0000');
+          gradient.addColorStop(1, '#0000ff');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 30, 280, 30);
+          const dataURL = canvas.toDataURL();
+          let hash = 0;
+          for (let i = 0; i < dataURL.length; i++) {
+            hash = ((hash << 5) - hash) + dataURL.charCodeAt(i);
+            hash = hash & hash;
+          }
+          return Math.abs(hash).toString(16).substring(0, 16).toUpperCase();
+        } catch (e) {
+          return '不可用';
+        }
+      }
+
+      // WebGL 信息
+      function getWebGLInfo() {
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          if (!gl) return { vendor: '无', renderer: '无', version: '无' };
+          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          return {
+            vendor: dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+            renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+            version: gl.getParameter(gl.VERSION)
+          };
+        } catch (e) {
+          return { vendor: '不可用', renderer: '不可用', version: '不可用' };
+        }
+      }
+
+      // 音频指纹
+      async function getAudioFingerprint() {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return '不可用';
+          const ctx = new AudioContext();
+          const oscillator = ctx.createOscillator();
+          const analyser = ctx.createAnalyser();
+          const gain = ctx.createGain();
+          const compressor = ctx.createDynamicsCompressor();
+
+          oscillator.type = 'triangle';
+          oscillator.frequency.value = 10000;
+          gain.gain.value = 0;
+          compressor.threshold.value = -50;
+          compressor.knee.value = 40;
+          compressor.ratio.value = 12;
+          compressor.attack.value = 0;
+          compressor.release.value = 0.25;
+
+          oscillator.connect(compressor);
+          compressor.connect(analyser);
+          analyser.connect(gain);
+          gain.connect(ctx.destination);
+          oscillator.start(0);
+
+          const data = new Float32Array(analyser.frequencyBinCount);
+          analyser.getFloatFrequencyData(data);
+          oscillator.stop();
+
+          await ctx.close();
+
+          let hash = 0;
+          for (let i = 0; i < data.length; i++) {
+            const val = Math.abs(data[i]);
+            hash = ((hash << 5) - hash) + Math.floor(val * 1000);
+            hash = hash & hash;
+          }
+          return Math.abs(hash).toString(16).substring(0, 16).toUpperCase();
+        } catch (e) {
+          return '不可用';
+        }
+      }
+
+      // 字体枚举
+      function getFontList() {
+        const baseFonts = ['monospace', 'sans-serif', 'serif'];
+        const testString = 'mmmmmmmmmmlli';
+        const testSize = '72px';
+        const span = document.createElement('span');
+        span.style.position = 'absolute';
+        span.style.left = '-9999px';
+        span.style.fontSize = testSize;
+        span.style.lineHeight = 'normal';
+        span.textContent = testString;
+        document.body.appendChild(span);
+
+        const baseWidths = {};
+        baseFonts.forEach(base => {
+          span.style.fontFamily = base;
+          baseWidths[base] = span.offsetWidth;
+        });
+
+        const candidates = [
+          'Arial', 'Arial Black', 'Comic Sans MS', 'Courier New', 'Georgia',
+          'Impact', 'Lucida Console', 'Lucida Sans Unicode', 'Palatino Linotype',
+          'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana',
+          'Microsoft YaHei', 'SimSun', 'SimHei', 'PingFang SC', 'Hiragino Sans GB',
+          'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei',
+          'Helvetica Neue', 'Helvetica', 'Menlo', 'Monaco', 'SF Pro Text',
+          'Segoe UI', 'Calibri', 'Cambria', 'Consolas', 'Roboto', 'Ubuntu'
         ];
-        const str = parts.join('|');
+
+        const detected = [];
+        candidates.forEach(font => {
+          let found = false;
+          baseFonts.forEach(base => {
+            span.style.fontFamily = `"${font}", ${base}`;
+            if (span.offsetWidth !== baseWidths[base]) found = true;
+          });
+          if (found) detected.push(font);
+        });
+
+        document.body.removeChild(span);
+        return detected;
+      }
+
+      // 数学指纹
+      function getMathFingerprint() {
+        const probes = [
+          Math.tan(-1e300), Math.sin(1e300), Math.cos(1e300),
+          Math.exp(1e300), Math.log(1e300), Math.sqrt(1e300),
+          Math.atan(1e300), Math.asin(1e300)
+        ];
+        const str = probes.map(v => v.toString()).join('|');
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+          hash = ((hash << 5) - hash) + str.charCodeAt(i);
+          hash = hash & hash;
+        }
+        return Math.abs(hash).toString(16).substring(0, 16).toUpperCase();
+      }
+
+      // 特性矩阵
+      function getFeatureMatrix() {
+        const features = [
+          'WebGLRenderingContext', 'WebGL2RenderingContext', 'AudioContext',
+          'OffscreenCanvas', 'ResizeObserver', 'IntersectionObserver',
+          'MutationObserver', 'PerformanceObserver', 'Notification',
+          'ServiceWorker', 'PushManager', 'RTCPeerConnection',
+          'MediaDevices', 'Bluetooth', 'USB', 'HID', 'Serial',
+          'WebAssembly', 'SharedArrayBuffer', 'Atomics',
+          'Intl.DateTimeFormat', 'Intl.RelativeTimeFormat', 'Intl.Segmenter'
+        ];
+        const bits = features.map(f => {
+          const exists = typeof window[f] !== 'undefined' || f in window;
+          return exists ? '1' : '0';
+        }).join('');
+        // 转十六进制
+        let hash = 0;
+        for (let i = 0; i < bits.length; i++) {
+          hash = ((hash << 5) - hash) + (bits[i] === '1' ? 1 : 0);
+          hash = hash & hash;
+        }
+        return {
+          bits: bits,
+          hash: Math.abs(hash).toString(16).substring(0, 12).toUpperCase()
+        };
+      }
+
+      // 综合指纹哈希（组合所有信号）
+      function getComprehensiveFingerprint(signals) {
+        const str = Object.values(signals).join('|');
         let hash = 0;
         for (let i = 0; i < str.length; i++) {
           const c = str.charCodeAt(i);
           hash = ((hash << 5) - hash) + c;
           hash = hash & hash;
         }
-        return Math.abs(hash).toString(16).substring(0, 12).toUpperCase();
+        return Math.abs(hash).toString(16).substring(0, 16).toUpperCase();
       }
 
+      // ========== 代理/VPN 检测 ==========
       function detectProxy(ipInfo) {
         if (!ipInfo) return '无法检测 (无 IP 信息)';
         const signals = [];
@@ -1004,13 +1200,36 @@
           fetchPublicIPv6()
         ]);
 
-        // 第二步：并行获取 DNS + 本地 IP + 磁盘 + 电池
-        const [dnsResult, localIPs, diskInfo, batteryInfo] = await Promise.all([
+        // 第二步：并行获取 DNS + 本地 IP + 磁盘 + 电池 + 音频指纹
+        const [dnsResult, localIPs, diskInfo, batteryInfo, audioFp] = await Promise.all([
           fetchDnsInfo(ipInfo),
           getLocalIPs(),
           getDiskInfo(),
-          getBatteryInfo()
+          getBatteryInfo(),
+          getAudioFingerprint()
         ]);
+
+        // 第三步：采集高级指纹（同步部分）
+        const canvasFp = getCanvasFingerprint();
+        const webglInfo = getWebGLInfo();
+        const fontList = getFontList();
+        const mathFp = getMathFingerprint();
+        const featureMatrix = getFeatureMatrix();
+
+        // 综合指纹
+        const comprehensiveFp = getComprehensiveFingerprint({
+          canvas: canvasFp,
+          webglVendor: webglInfo.vendor,
+          webglRenderer: webglInfo.renderer,
+          audio: audioFp,
+          fonts: fontList.length,
+          math: mathFp,
+          feature: featureMatrix.hash,
+          ua: navigator.userAgent,
+          lang: navigator.language,
+          screen: screen.width + 'x' + screen.height,
+          tz: Intl.DateTimeFormat().resolvedOptions().timeZone
+        });
 
         // ---------- IP 与地理 ----------
         if (ipInfo) {
@@ -1034,7 +1253,6 @@
         setText('localeValue', getLocaleInfo());
 
         // ---------- 网络地址 ----------
-        // 公网 IPv4：独立探测优先，IP 信息作为备选
         if (publicIpv4) {
           setHTML('publicIpv4Value', `<span class="tag public">${publicIpv4}</span> <span class="small-note">独立探测</span>`);
         } else if (ipInfo && ipInfo.ip && !ipInfo.ip.includes(':')) {
@@ -1043,7 +1261,6 @@
           setHTML('publicIpv4Value', '<span class="placeholder">未检测到 (可能无 IPv4 出口)</span>');
         }
 
-        // 公网 IPv6：独立探测优先
         if (publicIpv6) {
           setHTML('publicIpv6Value', `<span class="tag public">${publicIpv6}</span> <span class="small-note">独立探测</span>`);
         } else if (ipInfo && ipInfo.ip && ipInfo.ip.includes(':')) {
@@ -1052,7 +1269,6 @@
           setHTML('publicIpv6Value', '<span class="placeholder">未检测到 (可能无 IPv6 出口)</span>');
         }
 
-        // 本地 IPv4
         const localV4Arr = Array.from(localIPs.localIpv4);
         if (localV4Arr.length > 0) {
           setTags('localIpv4Value', localV4Arr.map(ip => ({ text: ip, cls: 'local' })));
@@ -1060,7 +1276,6 @@
           setHTML('localIpv4Value', '<span class="placeholder">未获取到 (mDNS 混淆或浏览器限制)</span>');
         }
 
-        // 本地 IPv6
         const localV6Arr = Array.from(localIPs.localIpv6);
         if (localV6Arr.length > 0) {
           setTags('localIpv6Value', localV6Arr.map(ip => ({ text: ip, cls: 'local' })));
@@ -1068,7 +1283,6 @@
           setHTML('localIpv6Value', '<span class="placeholder">未获取到 (mDNS 混淆或浏览器限制)</span>');
         }
 
-        // mDNS 混淆地址
         const mdnsArr = Array.from(localIPs.mdns);
         if (mdnsArr.length > 0) {
           setTags('mdnsValue', mdnsArr.map(h => ({ text: h, cls: 'mdns' })));
@@ -1076,7 +1290,6 @@
           setHTML('mdnsValue', '<span class="placeholder">未检测到 mDNS 混淆地址</span>');
         }
 
-        // STUN 反射地址
         const stunArr = Array.from(localIPs.stunReflexive);
         if (stunArr.length > 0) {
           setTags('stunValue', stunArr.map(ip => ({ text: ip, cls: 'public' })));
@@ -1087,15 +1300,13 @@
         // ---------- 网络配置 ----------
         setText('gatewayValue', getGatewayFromLocalIPs(localIPs.localIpv4));
 
-        // DNS显示
         if (dnsResult.dns) {
           setTags('dnsValue', [{ text: dnsResult.dns, cls: 'public' }]);
         } else {
           setHTML('dnsValue', '<span class="placeholder">无法自动检测 (DNS 不支持 ECS 或接口不可达)</span>');
         }
         setText('dnsSourceValue', dnsResult.source || '未获取到');
-        
-        // MAC (本地候选地址说明)
+
         if (localV4Arr.length > 0 || localV6Arr.length > 0) {
           const all = [...localV4Arr, ...localV6Arr].join(', ');
           setHTML('macValue', `${all} <span class="small-note">(本地候选地址，非真实 MAC)</span>`);
@@ -1114,7 +1325,26 @@
         setText('gpuValue', getGpuInfo());
         setText('batteryValue', batteryInfo);
         setText('performanceValue', getPerformanceScore());
-        setText('fingerprintValue', getFingerprint());
+
+        // ---------- 高级指纹 ----------
+        setHTML('canvasValue', `<span class="tag hash">${canvasFp}</span>`);
+        setText('webglVendorValue', webglInfo.vendor);
+        setText('webglRendererValue', webglInfo.renderer);
+        setHTML('audioValue', `<span class="tag hash">${audioFp}</span>`);
+        setText('fontCountValue', `${fontList.length} 种`);
+
+        // 字体列表：只显示前 8 个，避免刷屏
+        if (fontList.length > 0) {
+          const preview = fontList.slice(0, 8).join(', ');
+          const more = fontList.length > 8 ? ` 等 ${fontList.length} 种` : '';
+          setHTML('fontListValue', `${preview}${more}`);
+        } else {
+          setHTML('fontListValue', '<span class="placeholder">未检测到额外字体</span>');
+        }
+
+        setHTML('mathValue', `<span class="tag hash">${mathFp}</span>`);
+        setHTML('featureValue', `<span class="tag hash">${featureMatrix.hash}</span> <span class="small-note">${featureMatrix.bits}</span>`);
+        setHTML('fingerprintValue', `<span class="tag hash">${comprehensiveFp}</span>`);
 
         // ---------- 环境安全 ----------
         setText('iframeValue', getIframeInfo(embedInfo));
